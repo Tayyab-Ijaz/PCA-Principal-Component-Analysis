@@ -1,0 +1,302 @@
+# Labels ASD & nonASD
+from sklearn.preprocessing import LabelEncoder
+le = LabelEncoder()
+y = dataset.iloc[:, -1]
+le.fit(y)
+Y_array = le.transform(y)
+Y = pd.DataFrame(Y_array)
+
+dataset.iloc[:, -1] = Y
+dataset.to_csv('ASD_non_ASD_genes.CSV', index=False)
+
+# Preprocess the dataset
+sc = StandardScaler()
+X = sc.fit_transform(x)
+pca = PCA(n_components=30, svd_solver='full')
+X_pca = pca.fit_transform(X)
+
+# Save the components' coordinates to a CSV file
+pca_df = pd.DataFrame(X_pca, columns=[f"PC{i}" for i in range(1, X_pca.shape[1]+1)])
+pca_df.to_csv(output_file, index=False)
+#print(f"Saved components' coordinates for all PCs to {output_file}")
+
+pca_df.head()
+
+pca_df.shape
+
+pca_df["Labels"] = Y
+update_with_labels = os.path.join("/content/drive/MyDrive", "components_coordinates_all_PCs_with_Genes&labels.csv")
+pca_df.to_csv(update_with_labels, index=False)
+
+#print(f"Saved components' coordinates for all PCs with labels and gene names to {update_with_labels}")
+
+pca_df.shape
+
+pca_df.index =  gene_names
+pca_df.head()
+
+# Calculate the explained variance ratio
+explained_variance_ratios = pca.explained_variance_ratio_
+
+transposed_pca = pca_df.T
+import matplotlib.pyplot as plt
+n_components = 23 # set number of components to plot (total_component= 100)
+comp = transposed_pca.iloc[:, :n_components]
+x = range(1, n_components+1) # set range for x-axis
+# Plot the cumulative variance ratio for the first n components
+plt.figure(figsize=(8, 6))
+#plt.plot(x, explained_variance_ratios, 'b-') # remove the marker argument
+plt.bar(x, explained_variance_ratios[:n_components], align='center', alpha=0.8)
+plt.xlabel('PCA Components')
+plt.ylabel('Cumulative Variance Ratio')
+plt.title('Elbow Plot for PCA')
+plt.show()
+
+from sklearn.preprocessing import LabelEncoder
+from scipy.stats import ranksums
+import pandas as pd
+# apply the Wilcoxon rank-sum test to the two arrays
+statistic, pvalue = ranksums(pca_df.iloc[:,0], Y)
+# print the p-value
+print('The p-value of the Wilcoxon rank-sum test is:', pvalue)
+
+from scipy.stats import ranksums
+import pandas as pd
+# Loop through all columns in the DataFrame, except for the first column
+for i in range(0, 30):
+    # Separate the current column (categorical) into a separate array
+    PCA_Components = pca_df.iloc[:, i].values
+    # Apply the Wilcoxon rank-sum test to the two arrays
+    statistic, pvalue = ranksums(PCA_Components, Y)
+# Print the p-value and the name of the current column
+    print(f"The p-value of the Wilcoxon rank-sum test between labels and '{pca_df.columns[i]}' is: {pvalue}")
+
+from sklearn.preprocessing import LabelEncoder
+from scipy.stats import ranksums
+import pandas as pd
+
+significant_components = []
+alpha = 0.05 / 30
+# Loop through all columns in the DataFrame, except for the first column
+for i in range(0, 30):
+    # Separate the current column (categorical) into a separate array
+    PCA_Components = pca_df.iloc[:, i].values
+    # Apply the Wilcoxon rank-sum test to the two arrays
+    statistic, pvalue = ranksums(PCA_Components, Y)
+# Apply Bonferroni correction to the p-value threshold
+    if (pvalue < alpha).any:
+        print(f"The distribution of values in '{i}' is significantly different between ASD and nonASD groups (p = {pvalue})")
+        significant_components.append(pca_df.iloc[:, i])
+    else:
+        print(f"The distribution of values in '{i}' is not significantly different between ASD and nonASD groups (p = {pvalue})")
+
+# create a new DataFrame with the significant components
+significant_df = pd.concat(significant_components, axis=1)
+
+# save the new DataFrame to a CSV file
+significant_df.to_csv('significant_components.csv', index=False)
+
+#print(f"Saved components' coordinates for significant PCs to /content/drive/MyDrive ")
+
+significant_df.index = gene_names
+significant_df.head()
+
+significant_df["Labels"] = Y
+update_with_labels = os.path.join("/content/drive/MyDrive", "components_coordinates_all_PCs_with_Genes&labels_Signi.csv")
+pca_df.to_csv(update_with_labels, index=False)
+
+#print(f"Saved components' coordinates for all PCs with labels and gene names to {update_with_labels}")
+
+significant_df.head()
+
+# Values of signicifant PC components Rows
+signi_components = significant_df.iloc[:, :22]
+signi_components.shape
+
+from sklearn.metrics import confusion_matrix, accuracy_score, precision_score, recall_score
+from sklearn.svm import SVC
+# Train SVM Classifier
+svm = SVC(kernel='linear', C=1, random_state=42,probability=True)
+from sklearn.model_selection import StratifiedKFold, cross_val_score
+kf = StratifiedKFold(n_splits=5)
+for train_index, test_index in kf.split(signi_components, Y):
+    X_train_fold, X_test_fold = pd.DataFrame(signi_components).iloc[train_index], pd.DataFrame(signi_components).iloc[test_index]
+    y_train_fold, y_test_fold = pd.DataFrame(Y).iloc[train_index], pd.DataFrame(Y).iloc[test_index]
+    y_train_fold = np.ravel(y_train_fold)  # Reshape y_train_fold to (n_samples,)
+    y_test_fold = np.ravel(y_test_fold)    # Reshape y_test_fold to (n_samples,)
+    svm.fit(X_train_fold, y_train_fold)
+svm_pred = svm.predict(X_test_fold)
+
+from sklearn.metrics import f1_score
+accuracies = []
+precisions = []
+recalls = []
+f1_scores = []
+# Calculate the accuracy of the predictions
+accuracy = accuracy_score(y_test_fold, svm_pred)
+accuracies.append(accuracy)
+
+# Calculate the mean accuracy and standard deviation
+mean_accuracy = np.mean(accuracies)
+
+# Calculate the precision of the predictions
+precision = precision_score(y_test_fold, svm_pred, average='weighted')
+precisions.append(precision)
+
+# Calculate the recall of the predictions
+recall = recall_score(y_test_fold, svm_pred, average='weighted')
+recalls.append(recall)
+
+# Calculate the F1-score of the predictions
+f1 = f1_score(y_test_fold, svm_pred, average='weighted')
+f1_scores.append(f1)
+
+
+# Calculate the mean and standard deviation of accuracy, precision, recall, and F1-score
+mean_accuracy = np.mean(accuracies)
+std_accuracy = np.std(accuracies)
+
+mean_precision = np.mean(precisions)
+std_precision = np.std(precisions)
+
+mean_recall = np.mean(recalls)
+std_recall = np.std(recalls)
+
+mean_f1 = np.mean(f1_scores)
+std_f1 = np.std(f1_scores)
+
+# Print the evaluation metrics
+
+print("Mean accuracy:", mean_accuracy)
+print("Mean precision:", mean_precision)
+print("Mean recall:", mean_recall)
+print("Mean F1-score:", mean_f1)
+
+svm_pred
+
+y.shape
+
+import matplotlib.pyplot as plt
+import numpy as np
+from sklearn.metrics import roc_curve, auc
+
+
+#  (plotting ROC curve)
+n_classes = len(np.unique(y))  # Number of classes in the target variable #ASD=0, nonASD=2 ASD,nonASD=1
+mean_fpr = np.linspace(0, 1, 100)
+tprs = []
+aucs = []
+fig, ax = plt.subplots(figsize=(8, 6))
+
+for i in range(n_classes):#falsepostiverate_fpr, truepostiverate_tpr
+        fpr, tpr, _ = roc_curve(y_test_fold, svm_pred, pos_label=i)
+        roc_auc = auc(fpr, tpr)
+        ax.plot(fpr, tpr, lw=1, alpha=0.3, label=f"ROC class {i} (AUC = {roc_auc:.2f})")
+        tprs.append(np.interp(mean_fpr, fpr, tpr))
+        aucs.append(roc_auc)
+
+# Plot mean ROC curve
+mean_tpr = np.mean(tprs, axis=0)
+mean_auc = auc(mean_fpr, mean_tpr)
+std_auc = np.std(aucs)
+ax.plot(
+    mean_fpr,
+    mean_tpr,
+    color="red",
+    label=r"Mean ROC (AUC = %0.2f $\pm$ %0.2f)" % (mean_auc, std_auc),
+    lw=2,
+    alpha=0.8,
+)
+
+# Plot chance level ROC curve
+ax.plot([0, 1], [0, 1], "b--", label="Chance level (AUC = 0.5)")
+
+std_tpr = np.std(tprs, axis=0)
+tprs_upper = np.minimum(mean_tpr + std_tpr, 1)
+tprs_lower = np.maximum(mean_tpr - std_tpr, 0)
+
+ax.fill_between(
+    mean_fpr,
+    tprs_lower,
+    tprs_upper,
+    color="blue",
+    alpha=0.2,
+    label=r"$\pm$ 1 std. dev.",
+)
+
+ax.set(
+    xlim=[-0.05, 1.05],
+    ylim=[-0.05, 1.05],
+    xlabel="False Positive Rate",
+    ylabel="True Positive Rate",
+    title="Mean ROC curve with variability",
+)
+ax.axis("square")
+ax.legend(loc="lower right")
+plt.show()
+
+
+print("mean_auc:",mean_auc)
+
+from sklearn.metrics import confusion_matrix, accuracy_score, precision_score, recall_score
+from sklearn.ensemble import RandomForestClassifier
+
+# Train Random Forest Classifier
+rf = RandomForestClassifier(random_state=42)
+
+from sklearn.model_selection import StratifiedKFold, cross_val_score
+kf = StratifiedKFold(n_splits=5)
+for train_index, test_index in kf.split(signi_components, Y):
+    X_train_fold, X_test_fold = pd.DataFrame(signi_components).iloc[train_index], pd.DataFrame(signi_components).iloc[test_index]
+    y_train_fold, y_test_fold = pd.DataFrame(Y).iloc[train_index], pd.DataFrame(Y).iloc[test_index]
+    y_train_fold = np.ravel(y_train_fold)  # Reshape y_train_fold to (n_samples,)
+    y_test_fold = np.ravel(y_test_fold)    # Reshape y_test_fold to (n_samples,)
+    rf.fit(X_train_fold, y_train_fold)
+rf_pred = rf.predict(X_test_fold)
+
+from sklearn.metrics import f1_score
+accuracies = []
+precisions = []
+recalls = []
+f1_scores = []
+# Calculate the accuracy of the predictions
+accuracy = accuracy_score(y_test_fold, rf_pred)
+accuracies.append(accuracy)
+
+# Calculate the mean accuracy and standard deviation
+mean_accuracy = np.mean(accuracies)
+
+# Calculate the precision of the predictions
+precision = precision_score(y_test_fold, rf_pred, average='weighted')
+precisions.append(precision)
+
+# Calculate the recall of the predictions
+recall = recall_score(y_test_fold, rf_pred, average='weighted')
+recalls.append(recall)
+
+# Calculate the F1-score of the predictions
+f1 = f1_score(y_test_fold, rf_pred, average='weighted')
+f1_scores.append(f1)
+
+
+# Calculate the mean and standard deviation of accuracy, precision, recall, and F1-score
+mean_accuracy = np.mean(accuracies)
+std_accuracy = np.std(accuracies)
+
+mean_precision = np.mean(precisions)
+std_precision = np.std(precisions)
+
+mean_recall = np.mean(recalls)
+std_recall = np.std(recalls)
+
+mean_f1 = np.mean(f1_scores)
+std_f1 = np.std(f1_scores)
+
+# Print the evaluation metrics
+
+print("Mean accuracy:", mean_accuracy)
+print("Mean precision:", mean_precision)
+print("Mean recall:", mean_recall)
+print("Mean F1-score:", mean_f1)
+
+rf_pred
